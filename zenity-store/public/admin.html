@@ -1,0 +1,16 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZENITY · Pedidos</title>
+<style>body{background:#0a0a0a;color:#f4f4f2;font:14px Arial;margin:0;padding:24px}h1{font:400 40px Impact;letter-spacing:.05em}h1 b{color:#e10600;font-weight:400}
+table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px;border-bottom:1px solid #ffffff22;text-align:left;vertical-align:top;font-size:13px}th{font-size:11px;letter-spacing:.12em;opacity:.6}
+.s{display:inline-block;padding:3px 9px;font-weight:700;font-size:11px;letter-spacing:.1em}.APPROVED{background:#16a34a}.PENDING{background:#ca8a04}.DECLINED,.ERROR,.VOIDED{background:#e10600}
+.f button{background:none;border:1px solid #fff;color:#fff;padding:7px 14px;margin-right:6px;cursor:pointer}.f button.on{background:#e10600;border-color:#e10600}.w{overflow-x:auto}</style></head><body>
+<h1>PEDIDOS <b>ZENITY</b></h1><div class="f" id="f"></div><div id="m"></div><div class="w"><table><thead><tr><th>PEDIDO</th><th>FECHA</th><th>CLIENTE</th><th>ENTREGA</th><th>PRODUCTOS</th><th>TOTAL</th><th>PAGO</th></tr></thead><tbody id="b"></tbody></table></div>
+<script>
+const ES={APPROVED:'PAGADO',PENDING:'PENDIENTE',DECLINED:'RECHAZADO',ERROR:'ERROR',VOIDED:'ANULADO'},esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';'),$=n=>'$'+Number(n).toLocaleString('es-CO');
+let rows=[],flt='ALL';
+async function load(){let t=sessionStorage.zt||prompt('Clave de administrador');if(!t)return;
+ const r=await fetch('/api/admin/orders',{headers:{'x-admin-token':t}});if(r.status===401){sessionStorage.removeItem('zt');m.textContent='Clave incorrecta. Recarga la página.';return}
+ sessionStorage.zt=t;rows=await r.json();draw()}
+function draw(){f.innerHTML=['ALL','APPROVED','PENDING','DECLINED'].map(k=>`<button class="${k===flt?'on':''}" data-k="${k}">${k==='ALL'?'TODOS':ES[k]}${k==='ALL'?' ('+rows.length+')':' ('+rows.filter(o=>o.payment_status===k).length+')'}</button>`).join('');
+ b.innerHTML=rows.filter(o=>flt==='ALL'||o.payment_status===flt).map(o=>`<tr><td><b>${esc(o.id)}</b></td><td>${esc(new Date(o.created_at).toLocaleString('es-CO'))}</td><td>${esc(o.customer_name)}<br>${esc(o.email)}<br>${esc(o.phone)}</td><td>${esc(o.city)}<br>${esc(o.address)}${o.notes?'<br><i>'+esc(o.notes)+'</i>':''}</td><td>${o.items.map(i=>esc(i.name)+' ('+esc(i.size)+')').join('<br>')}</td><td>${$(o.total_cop)}</td><td><span class="s ${esc(o.payment_status)}">${ES[o.payment_status]||esc(o.payment_status)}</span><br><small>${esc(o.payment_method||'')} ${o.paid_at?'· '+esc(new Date(o.paid_at).toLocaleString('es-CO')):''}</small></td></tr>`).join('')}
+f.onclick=e=>{if(e.target.dataset.k){flt=e.target.dataset.k;draw()}};load();setInterval(()=>sessionStorage.zt&&load(),30000);
+</script></body></html>
