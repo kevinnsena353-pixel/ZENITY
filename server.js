@@ -16,6 +16,33 @@ const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '100kb' }));
+
+// Admin access uses HTTP Basic Auth. Configure ADMIN_USER and ADMIN_PASSWORD in Render.
+function adminAuth(req, res, next) {
+  const user = process.env.ADMIN_USER;
+  const pass = process.env.ADMIN_PASSWORD;
+  if (!user || !pass) return res.status(503).send('Panel admin sin configurar. Define ADMIN_USER y ADMIN_PASSWORD en Render.');
+  const header = req.headers.authorization || '';
+  const match = header.match(/^Basic\s+(.+)$/i);
+  if (match) {
+    let decoded = '';
+    try { decoded = Buffer.from(match[1], 'base64').toString('utf8'); } catch {}
+    const sep = decoded.indexOf(':');
+    if (sep >= 0) {
+      const suppliedUser = Buffer.from(decoded.slice(0, sep));
+      const suppliedPass = Buffer.from(decoded.slice(sep + 1));
+      const expectedUser = Buffer.from(user);
+      const expectedPass = Buffer.from(pass);
+      const userOk = suppliedUser.length === expectedUser.length && crypto.timingSafeEqual(suppliedUser, expectedUser);
+      const passOk = suppliedPass.length === expectedPass.length && crypto.timingSafeEqual(suppliedPass, expectedPass);
+      if (userOk && passOk) return next();
+    }
+  }
+  res.set('WWW-Authenticate', 'Basic realm="ZENITY Admin", charset="UTF-8"');
+  return res.status(401).send('Autenticación requerida.');
+}
+app.get('/admin', adminAuth, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.use('/api/admin', adminAuth);
 app.use(express.static(path.join(__dirname, 'public')));
 
 function requireConfig() {
@@ -75,6 +102,14 @@ app.get('/api/health', async (_req,res) => {
   catch (e) { res.status(503).json({ok:false,error:'Database not ready'}); }
 });
 app.get('/api/products', (_req,res) => res.json(PRODUCTS));
+app.get('/api/admin/products', (_req,res) => res.json(PRODUCTS.map(p => ({ name:p.name, category:p.category, price:p.price }))));
+app.get('/api/admin/orders', async (_req,res) => {
+  try {
+    if (!pool) return res.status(503).json({error:'Base de datos no configurada'});
+    const result = await pool.query(`SELECT id, reference, customer_name, customer_email, phone, city, address, notes, items, amount_cop, payment_status, wompi_transaction_id, created_at, updated_at FROM orders ORDER BY created_at DESC LIMIT 200`);
+    res.json(result.rows);
+  } catch (e) { console.error('admin orders error:', e.message); res.status(500).json({error:'No se pudieron cargar los pedidos'}); }
+});
 app.post('/api/orders', async (req,res) => {
   try {
     requireConfig(); if (!pool) return res.status(503).json({error:'Base de datos no configurada.'});
