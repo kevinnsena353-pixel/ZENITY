@@ -195,7 +195,7 @@ footer.ft{display:block;padding:0;background:#050505;border-top:0;color:#f4f4f2}
 
 <script>
 /* Para fotos reales: pon la ruta en front/back (ej. "img/hoodie-frente.png"). Vacío = dibujo SVG. */
-const P=[
+let P=[
  {n:'CHAQUETA REAPER',t:'chaquetas',pr:259000,c:'#111',ink:'#e10600',d:'REAPER',tag:'LIMITADO',front:'',back:''},
  {n:'CHAQUETA BOMBER RED',t:'chaquetas',pr:249000,c:'#e10600',ink:'#0a0a0a',d:'ZENITY',front:'',back:''},
  {n:'SUDADERA APEX',t:'sudaderas',pr:169000,c:'#e10600',ink:'#fff',d:'APEX',tag:'NUEVO',front:'',back:''},
@@ -222,14 +222,15 @@ const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.targ
 let cart=[],filter='todo';
 function card(p,look,i){
  const d=document.createElement('div');d.className='p';
- d.innerHTML=`${look?`<div class="tag">LOOK 0${i+1}</div>`:p.tag?`<div class="tag">${p.tag}</div>`:''}<div class="img">${fmt(p,'front')}${fmt(p,'back')}</div><span class="hint">VER ESPALDA ↻</span><div class="info">${p.n}<span>${look?'VER →':money(p.pr)}</span></div>${look?'':'<button class="add">AÑADIR A LA BAG</button>'}`;
+ d.innerHTML=`${look?`<div class="tag">LOOK 0${i+1}</div>`:p.tag?`<div class="tag">${p.tag}</div>`:''}<div class="img">${fmt(p,'front')}${fmt(p,'back')}</div><span class="hint">VER ESPALDA ↻</span><div class="info">${p.n}<span>${look?'VER →':money(p.pr)}</span></div>${look?'':(p.stock===0?'<button class="add" disabled>AGOTADO</button>':'<button class="add">AÑADIR A LA BAG</button>')}`;
  const a=d.querySelector('.add');if(a)a.onclick=e=>{e.stopPropagation();cart.push({p,s:p.t==='gorras'?'ÚNICA':'M'});upd();toast(p.n+' añadida')};
  io.observe(d);return d;
 }
 function fill(id,list,look){const g=document.getElementById(id);g.innerHTML='';list.forEach((p,i)=>g.appendChild(card(p,look,i)))}
 const shop=()=>fill('g-shop',P.filter(p=>filter==='todo'||p.t===filter));
-Object.keys(CAT).forEach(t=>{const b=document.createElement('button');b.className='cat H'+(t==='todo'?' on':'');const n=t==='todo'?P.length:P.filter(p=>p.t===t).length;b.innerHTML=(t==='todo'?'<svg viewBox="0 0 300 320"><path d="'+CROSS+'" transform="translate(150,160) scale(2.2)" fill="currentColor"/></svg>':'<svg viewBox="0 0 300 320"><path d="'+CAT[t]+'" fill="none" stroke="currentColor" stroke-width="14"/></svg>')+t+'<small>'+n+' PRODUCTOS</small>';b.onclick=()=>{filter=t;document.querySelectorAll('.cat').forEach(x=>x.classList.remove('on'));b.classList.add('on');shop()};cats.appendChild(b)});
-fill('g-home',[P[0],P[2],P[4]]);shop();
+async function syncCatalog(){try{const r=await fetch('/api/products');if(!r.ok)return;const data=await r.json();if(!Array.isArray(data)||!data.length)return;const defaults=new Map(P.map(p=>[p.n,p]));P=data.map(x=>{const old=defaults.get(x.name)||{};return {...old,n:x.name,t:x.category,pr:Number(x.price),tag:x.tag||old.tag||'',stock:Number(x.stock??20),active:x.active!==false,c:old.c||'#171717',ink:old.ink||'#e10600',d:old.d||x.name.split(' ')[0],front:old.front||'',back:old.back||''}})}catch(e){}}
+async function initCatalog(){await syncCatalog();Object.keys(CAT).forEach(t=>{const b=document.createElement('button');b.className='cat H'+(t==='todo'?' on':'');const n=t==='todo'?P.length:P.filter(p=>p.t===t).length;b.innerHTML=(t==='todo'?'<svg viewBox="0 0 300 320"><path d="'+CROSS+'" transform="translate(150,160) scale(2.2)" fill="currentColor"/></svg>':'<svg viewBox="0 0 300 320"><path d="'+(CAT[t]||CAT.camisetas)+'" fill="none" stroke="currentColor" stroke-width="14"/></svg>')+t+'<small>'+n+' PRODUCTOS</small>';b.onclick=()=>{filter=t;document.querySelectorAll('.cat').forEach(x=>x.classList.remove('on'));b.classList.add('on');shop()};cats.appendChild(b)});fill('g-home',P.slice(0,3));shop();}
+initCatalog();
 /* modelos (reemplaza por <img>) */
 const mp=[P[4],P[2],P[0]];
 document.querySelectorAll('.model').forEach((m,i)=>{const p=mp[i];m.insertAdjacentHTML('afterbegin',`<svg class="m" viewBox="0 0 300 420"><circle cx="150" cy="70" r="40" fill="#8886"/><g transform="translate(0,95)">${shirt(p,false).replace(/<svg[^>]*>|<\/svg>/g,'')}</g></svg>`)});

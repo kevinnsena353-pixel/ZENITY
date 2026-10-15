@@ -36,3 +36,12 @@ El frontend conserva el HTML original y sus diseños. Se añade un backend Expre
 
 ## Cómo probar sin hacer cobros reales
 Usa exclusivamente las llaves sandbox y los medios/credenciales de prueba indicados en la documentación de Wompi. No introduzcas datos de tarjetas reales en sandbox. La disponibilidad de medios de prueba puede variar según la cuenta.
+
+
+## Funciones del panel de administración ampliado
+
+Entra a `/admin` con `ADMIN_USER` y `ADMIN_PASSWORD` configurados en Render. El panel incluye resumen de ventas/pedidos, gestión de catálogo (crear, editar, ocultar/activar), precios, categoría, etiqueta y existencias; alertas de stock bajo; filtros de pedidos por pago y despacho; actualización de estado logístico y guía; vista de clientes calculada desde los pedidos; y exportación CSV de pedidos.
+
+La tabla `products` se crea automáticamente y se inicializa con los productos del catálogo que aún no existan, con 20 unidades iniciales por producto. **Antes de operar la tienda, revisa y corrige esas existencias para que coincidan con tu inventario real.** Los productos nuevos o cambios de precio/stock hechos en el panel se reflejan en el catálogo público y el servidor usa el precio guardado en la base de datos al crear el pedido. El stock se descuenta cuando Wompi confirma por primera vez el pago aprobado.
+
+El panel todavía no incluye carga de fotografías desde el administrador, códigos de descuento, gestión automática de transportadoras ni devolución/reembolso por Wompi.

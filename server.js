@@ -41,7 +41,7 @@ function adminAuth(req, res, next) {
   res.set('WWW-Authenticate', 'Basic realm="ZENITY Admin", charset="UTF-8"');
   return res.status(401).send('Autenticación requerida.');
 }
-app.get('/admin', adminAuth, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get(['/admin','/admin.html'], adminAuth, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.use('/api/admin', adminAuth);
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -59,6 +59,14 @@ async function initDb() {
     wompi_transaction_id TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(payment_status)`);
+  await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfillment_status TEXT NOT NULL DEFAULT 'NUEVO'`);
+  await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS products (
+    id BIGSERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, category TEXT NOT NULL,
+    price BIGINT NOT NULL CHECK(price >= 0), stock INTEGER NOT NULL DEFAULT 0 CHECK(stock >= 0),
+    active BOOLEAN NOT NULL DEFAULT TRUE, tag TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  for (const p of PRODUCTS) await pool.query(`INSERT INTO products(name,category,price,stock,active) VALUES($1,$2,$3,20,TRUE) ON CONFLICT(name) DO NOTHING`, [p.name,p.category,p.price]);
 }
 function publicUrl(pathname) { return `${process.env.PUBLIC_URL.replace(/\/$/, '')}${pathname}`; }
 function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
@@ -68,15 +76,16 @@ function normalizeCustomer(c={}) {
   if (Object.values(customer).some(v => v.length > 500)) throw Object.assign(new Error('Uno de los campos es demasiado largo.'), { status:400 });
   return customer;
 }
-function priceItems(items) {
+async function priceItems(items) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 30) throw Object.assign(new Error('El carrito no es válido.'), {status:400});
-  return items.map(item => {
-    const product = PRODUCTS.find(p => p.name === item.name);
-    if (!product) throw Object.assign(new Error(`Producto no disponible: ${item.name}`), {status:400});
+  return Promise.all(items.map(async item => {
+    const product = pool ? (await pool.query('SELECT name,category,price,stock,active FROM products WHERE name=$1',[String(item.name||'')])).rows[0] : PRODUCTS.find(p => p.name === item.name);
+    if (!product || product.active === false) throw Object.assign(new Error(`Producto no disponible: ${item.name}`), {status:400});
+    if (pool && Number(product.stock) < 1) throw Object.assign(new Error(`Producto agotado: ${product.name}`), {status:400});
     const sizes = product.category === 'gorras' ? ['ÚNICA'] : ['S','M','L','XL'];
     if (!sizes.includes(item.size)) throw Object.assign(new Error(`Talla inválida para ${product.name}`), {status:400});
-    return { name:product.name, category:product.category, size:item.size, quantity:1, unitPrice:product.price, subtotal:product.price };
-  });
+    return { name:product.name, category:product.category, size:item.size, quantity:1, unitPrice:Number(product.price), subtotal:Number(product.price) };
+  }));
 }
 async function getWompiTransaction(id) {
   const key = process.env.WOMPI_PRIVATE_KEY;
@@ -94,6 +103,12 @@ async function updateFromWompi(tx) {
   // A payment is accepted only when the server-side Wompi transaction matches this order.
   if (Number(tx.amount_in_cents) !== Number(order.amount_cop) * 100 || tx.currency !== 'COP') return;
   const status = ['APPROVED','DECLINED','VOIDED','ERROR','PENDING'].includes(tx.status) ? tx.status : 'PENDING';
+  // Decrease inventory only on the first transition into APPROVED, so repeated webhooks do not subtract twice.
+  if (status === 'APPROVED' && order.payment_status !== 'APPROVED') {
+    for (const item of (Array.isArray(order.items) ? order.items : [])) {
+      await pool.query('UPDATE products SET stock=GREATEST(0,stock-$1),updated_at=NOW() WHERE name=$2', [Math.max(1, Number(item.quantity)||1), item.name]);
+    }
+  }
   await pool.query('UPDATE orders SET payment_status=$1, wompi_transaction_id=$2, updated_at=NOW() WHERE reference=$3', [status, tx.id || null, tx.reference]);
 }
 
@@ -101,12 +116,33 @@ app.get('/api/health', async (_req,res) => {
   try { if (!pool) throw new Error('DATABASE_URL no configurada'); await pool.query('SELECT 1'); res.json({ok:true, database:'connected', paymentEnvironment:process.env.WOMPI_ENV||'sandbox'}); }
   catch (e) { res.status(503).json({ok:false,error:'Database not ready'}); }
 });
-app.get('/api/products', (_req,res) => res.json(PRODUCTS));
-app.get('/api/admin/products', (_req,res) => res.json(PRODUCTS.map(p => ({ name:p.name, category:p.category, price:p.price }))));
+app.get('/api/products', async (_req,res) => {
+  try { if (!pool) return res.json(PRODUCTS.map(p=>({...p,stock:20,active:true}))); const r=await pool.query('SELECT id,name,category,price,stock,active,tag FROM products WHERE active=TRUE ORDER BY id'); res.json(r.rows); }
+  catch(e){res.status(500).json({error:'No se pudieron cargar productos'});}
+});
+app.get('/api/admin/products', async (_req,res) => {
+  try { if (!pool) return res.status(503).json({error:'Base de datos no configurada'}); const r=await pool.query('SELECT id,name,category,price,stock,active,tag,created_at,updated_at FROM products ORDER BY id'); res.json(r.rows); }
+  catch(e){res.status(500).json({error:'No se pudieron cargar productos'});}
+});
+app.post('/api/admin/products', async (req,res) => {
+  try { const {name,category,price,stock=0,active=true,tag=''}=req.body||{}; const n=String(name||'').trim().toUpperCase(), c=String(category||'').trim().toLowerCase(), pr=Number(price), st=Number(stock);
+    if(!n||n.length>120||!['chaquetas','sudaderas','camisetas','pantalones','gorras'].includes(c)||!Number.isSafeInteger(pr)||pr<0||!Number.isInteger(st)||st<0) return res.status(400).json({error:'Revisa nombre, categoría, precio y existencias.'});
+    const r=await pool.query('INSERT INTO products(name,category,price,stock,active,tag) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',[n,c,pr,st,Boolean(active),String(tag||'').slice(0,40)]); res.status(201).json(r.rows[0]);
+  } catch(e){res.status(e.code==='23505'?409:500).json({error:e.code==='23505'?'Ya existe un producto con ese nombre.':'No se pudo crear el producto.'});}
+});
+app.put('/api/admin/products/:id', async (req,res) => {
+  try { const {name,category,price,stock,active,tag=''}=req.body||{}; const n=String(name||'').trim().toUpperCase(), c=String(category||'').trim().toLowerCase(), pr=Number(price), st=Number(stock);
+    if(!n||n.length>120||!['chaquetas','sudaderas','camisetas','pantalones','gorras'].includes(c)||!Number.isSafeInteger(pr)||pr<0||!Number.isInteger(st)||st<0||typeof active!=='boolean') return res.status(400).json({error:'Revisa los datos del producto.'});
+    const r=await pool.query('UPDATE products SET name=$1,category=$2,price=$3,stock=$4,active=$5,tag=$6,updated_at=NOW() WHERE id=$7 RETURNING *',[n,c,pr,st,active,String(tag||'').slice(0,40),req.params.id]); if(!r.rowCount)return res.status(404).json({error:'Producto no encontrado'}); res.json(r.rows[0]);
+  } catch(e){res.status(e.code==='23505'?409:500).json({error:e.code==='23505'?'Ya existe un producto con ese nombre.':'No se pudo actualizar el producto.'});}
+});
+app.delete('/api/admin/products/:id', async (req,res) => { try { const r=await pool.query('UPDATE products SET active=FALSE,updated_at=NOW() WHERE id=$1 RETURNING id',[req.params.id]); if(!r.rowCount)return res.status(404).json({error:'Producto no encontrado'}); res.json({ok:true}); } catch(e){res.status(500).json({error:'No se pudo desactivar el producto'});} });
+app.patch('/api/admin/orders/:id/fulfillment', async (req,res) => { try { const allowed=['NUEVO','PREPARANDO','ENVIADO','ENTREGADO','CANCELADO']; const status=String(req.body.status||''); const tracking=String(req.body.tracking_number||'').trim().slice(0,120); if(!allowed.includes(status))return res.status(400).json({error:'Estado de envío no válido'}); const r=await pool.query('UPDATE orders SET fulfillment_status=$1,tracking_number=$2,updated_at=NOW() WHERE id=$3 RETURNING id,fulfillment_status,tracking_number',[status,tracking||null,req.params.id]); if(!r.rowCount)return res.status(404).json({error:'Pedido no encontrado'});res.json(r.rows[0]); }catch(e){res.status(500).json({error:'No se pudo actualizar el despacho'});} });
+app.get('/api/admin/summary', async (_req,res)=>{try{const r=await pool.query(`SELECT COUNT(*)::int AS orders, COUNT(*) FILTER(WHERE payment_status='APPROVED')::int AS approved, COUNT(*) FILTER(WHERE payment_status='PENDING')::int AS pending, COALESCE(SUM(amount_cop) FILTER(WHERE payment_status='APPROVED'),0)::bigint AS sales, (SELECT COUNT(*)::int FROM products WHERE active=TRUE) AS products, (SELECT COUNT(*)::int FROM products WHERE active=TRUE AND stock<=3) AS low_stock FROM orders`);res.json(r.rows[0]);}catch(e){res.status(500).json({error:'No se pudo cargar el resumen'});}});
 app.get('/api/admin/orders', async (_req,res) => {
   try {
     if (!pool) return res.status(503).json({error:'Base de datos no configurada'});
-    const result = await pool.query(`SELECT id, reference, customer_name, customer_email, phone, city, address, notes, items, amount_cop, payment_status, wompi_transaction_id, created_at, updated_at FROM orders ORDER BY created_at DESC LIMIT 200`);
+    const result = await pool.query(`SELECT id, reference, customer_name, customer_email, phone, city, address, notes, items, amount_cop, payment_status, fulfillment_status, tracking_number, wompi_transaction_id, created_at, updated_at FROM orders ORDER BY created_at DESC LIMIT 500`);
     res.json(result.rows);
   } catch (e) { console.error('admin orders error:', e.message); res.status(500).json({error:'No se pudieron cargar los pedidos'}); }
 });
@@ -114,7 +150,7 @@ app.post('/api/orders', async (req,res) => {
   try {
     requireConfig(); if (!pool) return res.status(503).json({error:'Base de datos no configurada.'});
     const customer = normalizeCustomer(req.body.customer);
-    const items = priceItems(req.body.items);
+    const items = await priceItems(req.body.items);
     const amount = items.reduce((sum,p)=>sum+p.subtotal,0);
     const reference = `ZEN-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     await pool.query(`INSERT INTO orders(reference,customer_name,customer_email,phone,city,address,notes,items,amount_cop,payment_status)
