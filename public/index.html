@@ -14,11 +14,7 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{background:var(--bg);color:var(--fg);font-family:'Helvetica Neue',Arial,sans-serif;overflow-x:hidden}
 body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:90;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
 .H{font-family:'Pirata One',Impact,'Arial Black',sans-serif;text-transform:uppercase;letter-spacing:.03em}
-.fl{display:block;max-width:100%;height:auto;object-fit:contain;object-position:center;overflow:visible;animation:flo 5s ease-in-out infinite;will-change:transform}
-#ld img.fl{width:min(72vw,480px);max-height:70vh;height:auto;object-fit:contain}
-.fg>div:first-child>img.fl{width:190px;height:auto;max-height:none;object-fit:contain}
-.logo img{height:42px;width:auto;max-width:150px;object-fit:contain;object-position:center;overflow:visible}
-footer .fl{overflow:visible}
+.fl{animation:flo 5s ease-in-out infinite;will-change:transform}
 @keyframes flo{0%,100%{transform:translateY(0) rotate(-1.2deg)}50%{transform:translateY(-18px) rotate(1.2deg)}}
 .glow{filter:drop-shadow(0 14px 22px #e1060055)}
 .spk{height:22px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='22'%3E%3Cpath d='M0 22L18 0L36 22Z' fill='%23e10600'/%3E%3C/svg%3E") repeat-x bottom}
@@ -187,7 +183,7 @@ footer.ft{display:block;padding:0;background:#050505;border-top:0;color:#f4f4f2}
 <label>NOMBRE COMPLETO</label><input name="nombre" required>
 <label>CORREO</label><input name="correo" type="email" required>
 <label>TELÉFONO / WHATSAPP</label><input name="telefono" type="tel" required>
-<label>CIUDAD / MUNICIPIO</label><select name="ciudad" id="checkoutCity" required><option value="">Selecciona tu ciudad o municipio</option></select><small id="cityHelp" style="display:block;font:11px/1.4 Arial;opacity:.7;margin:-2px 0 10px">Cargando municipios de Colombia…</small>
+<label>CIUDAD</label><input name="ciudad" required>
 <label>DIRECCIÓN DE ENTREGA</label><input name="direccion" required>
 <label>NOTAS (opcional)</label><textarea name="notas" rows="2"></textarea>
 <div class="ck"><input type="checkbox" name="acepto" required><span>Acepto los <a href="#terminos">términos</a>, la <a href="#privacidad">política de privacidad</a> y el <a href="#datos">tratamiento de datos personales</a>.</span></div>
@@ -259,47 +255,13 @@ function upd(){cn.textContent=cart.length;
 items.onchange=e=>{if(e.target.tagName==='SELECT')cart[e.target.dataset.i].s=e.target.value};
 items.onclick=e=>{const a=e.target.closest('a');if(a){e.preventDefault();cart.splice(a.dataset.i,1);upd()}};
 const openD=()=>{setV(1);dr.classList.add('open')},closeD=()=>dr.classList.remove('open');
-// Catálogo de municipios de Colombia: se carga desde un repositorio público.
-(async()=>{
- const citySelect=document.getElementById('checkoutCity'),cityHelp=document.getElementById('cityHelp');
- try{
-  const response=await fetch('https://raw.githubusercontent.com/proyecto26/colombia/master/cities.json');
-  if(!response.ok)throw new Error('No se pudo cargar la lista');
-  const cities=await response.json();
-  if(!Array.isArray(cities)||!cities.length)throw new Error('Lista de municipios no disponible');
-  cities.sort((a,b)=>String(a.name||a.city||'').localeCompare(String(b.name||b.city||''),'es'));
-  const frag=document.createDocumentFragment();
-  cities.forEach(item=>{const name=String(item.name||item.city||'').trim();if(!name)return;const option=document.createElement('option');option.value=name;option.textContent=name;frag.appendChild(option)});
-  citySelect.appendChild(frag);cityHelp.textContent='Selecciona el municipio donde recibirás tu pedido.';
- }catch(error){
-  // Fallback para que la compra no quede bloqueada si el catálogo externo falla.
-  const input=document.createElement('input');input.name='ciudad';input.id='checkoutCity';input.required=true;input.placeholder='Escribe tu ciudad o municipio';citySelect.replaceWith(input);cityHelp.textContent='No se pudo cargar la lista. Escribe tu ciudad o municipio.';
- }
-})();
 cb.onclick=openD;x.onclick=x2.onclick=x3.onclick=closeD;bk.onclick=()=>setV(1);
 pay.onclick=()=>cart.length?setV(2):toast('Agrega una prenda primero');
 document.getElementById('applyCoupon').onclick=async()=>{const code=document.getElementById('couponCode').value.trim();if(!code){appliedCoupon='';couponDiscount=0;document.getElementById('couponMsg').textContent='Código eliminado.';upd();return}try{const r=await fetch('/api/coupons/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,items:cart.map(c=>({name:c.p.n,size:c.s,quantity:1}))})});const d=await r.json();if(!r.ok)throw Error(d.error||'Cupón no válido');appliedCoupon=d.code;couponDiscount=Number(d.discount_cop)||0;document.getElementById('couponMsg').textContent='Cupón aplicado. Descuento: '+money(couponDiscount);upd()}catch(e){appliedCoupon='';couponDiscount=0;document.getElementById('couponMsg').textContent=e.message;upd()}};
-v2.onsubmit=async e=>{
- e.preventDefault();
- // Validación explícita para evitar falsos avisos cuando los campos sí están completos.
- const fd=new FormData(v2),raw=Object.fromEntries(fd.entries());
- const requiredFields=['nombre','correo','telefono','ciudad','direccion'];
- const missing=requiredFields.filter(k=>!String(raw[k]||'').trim());
- const emailValue=String(raw.correo||'').trim();
- const emailOK=/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)+$/i.test(emailValue) && emailValue.split('.').pop().length>=2 && v2.querySelector('[name="correo"]').checkValidity();
- if(missing.length){toast('Completa estos campos: '+missing.join(', '));return}
- if(!emailOK){toast('Escribe un correo válido, por ejemplo nombre@dominio.com.');v2.querySelector('[name="correo"]').focus();return}
- if(!v2.querySelector('[name="acepto"]').checked){toast('Debes aceptar las políticas para continuar.');return}
- if(!cart.length){toast('Tu carrito está vacío.');return}
- // Los checkboxes en FormData llegan como "on"; enviamos una aceptación normalizada.
- const customer={...raw,acepto:true,acceptTerms:true,
-   nombre:String(raw.nombre).trim(),correo:String(raw.correo).trim(),telefono:String(raw.telefono).trim(),ciudad:String(raw.ciudad).trim(),direccion:String(raw.direccion).trim(),notas:String(raw.notas||'').trim(),
-   name:String(raw.nombre).trim(),email:String(raw.correo).trim(),phone:String(raw.telefono).trim(),city:String(raw.ciudad).trim(),address:String(raw.direccion).trim()};
- payb.disabled=true;payb.textContent='CONECTANDO CON WOMPI…';
- try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer,items:cart.map(c=>({name:c.p.n,size:c.s,quantity:1})),couponCode:appliedCoupon})});
+v2.onsubmit=async e=>{e.preventDefault();payb.disabled=true;payb.textContent='CONECTANDO CON WOMPI…';
+ try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:Object.fromEntries(new FormData(v2)),items:cart.map(c=>({name:c.p.n,size:c.s,quantity:1})),couponCode:appliedCoupon})});
   const d=await r.json();if(!r.ok||!d.checkoutUrl)throw new Error(d.error||'No se pudo iniciar el pago');location.href=d.checkoutUrl}
- catch(err){toast(err.message||'No se pudo iniciar el pago. Intenta de nuevo.');payb.disabled=false;payb.textContent='CONFIRMAR Y PAGAR'}
-};
+ catch(err){toast(err.message||'No se pudo iniciar el pago. Intenta de nuevo.');payb.disabled=false;payb.textContent='CONFIRMAR Y PAGAR'}};
 /* regreso desde Wompi */
 (async()=>{const q=new URLSearchParams(location.search),o=q.get('order'),tx=q.get('id');if(!o)return;
  try{const r=await fetch('/api/orders/'+encodeURIComponent(o)+'/status'+(tx?'?tx='+encodeURIComponent(tx):''));const d=await r.json(),st=d.payment_status;

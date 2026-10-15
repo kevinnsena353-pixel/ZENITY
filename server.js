@@ -156,7 +156,36 @@ app.put('/api/admin/products/:id', async (req,res) => {
   } catch(e){res.status(e.code==='23505'?409:500).json({error:e.code==='23505'?'Ya existe un producto con ese nombre.':'No se pudo actualizar el producto.'});}
 });
 app.delete('/api/admin/products/:id', async (req,res) => { try { const r=await pool.query('UPDATE products SET active=FALSE,updated_at=NOW() WHERE id=$1 RETURNING id',[req.params.id]); if(!r.rowCount)return res.status(404).json({error:'Producto no encontrado'}); res.json({ok:true}); } catch(e){res.status(500).json({error:'No se pudo desactivar el producto'});} });
-app.patch('/api/admin/orders/:id/fulfillment', async (req,res) => { try { const allowed=['NUEVO','PREPARANDO','ENVIADO','ENTREGADO','CANCELADO']; const status=String(req.body.status||''); const tracking=String(req.body.tracking_number||'').trim().slice(0,120); if(!allowed.includes(status))return res.status(400).json({error:'Estado de envío no válido'}); const r=await pool.query('UPDATE orders SET fulfillment_status=$1,tracking_number=$2,updated_at=NOW() WHERE id=$3 RETURNING id,fulfillment_status,tracking_number',[status,tracking||null,req.params.id]); if(!r.rowCount)return res.status(404).json({error:'Pedido no encontrado'});res.json(r.rows[0]); }catch(e){res.status(500).json({error:'No se pudo actualizar el despacho'});} });
+app.patch('/api/admin/orders/:id/fulfillment', async (req,res) => {
+  try {
+    if (!pool) return res.status(503).json({error:'Base de datos no configurada'});
+    const id = String(req.params.id || '');
+    if (!/^\d+$/.test(id)) return res.status(400).json({error:'Identificador de pedido no válido'});
+    const allowed=['NUEVO','PREPARANDO','ENVIADO','ENTREGADO','CANCELADO'];
+    const status=String(req.body?.status||'');
+    const tracking=String(req.body?.tracking_number||'').trim().slice(0,120);
+    if(!allowed.includes(status)) return res.status(400).json({error:'Estado de despacho no válido'});
+    const r=await pool.query('UPDATE orders SET fulfillment_status=$1,tracking_number=$2,updated_at=NOW() WHERE id=$3 RETURNING id,reference,fulfillment_status,tracking_number,updated_at',[status,tracking||null,id]);
+    if(!r.rowCount) return res.status(404).json({error:'No se encontró el pedido para guardar el despacho'});
+    res.json({ok:true,...r.rows[0]});
+  } catch(e) {
+    console.error('save fulfillment error:', e.message);
+    res.status(500).json({error:'No se pudo guardar el despacho en la base de datos'});
+  }
+});
+app.delete('/api/admin/orders/:id', async (req,res) => {
+  try {
+    if (!pool) return res.status(503).json({error:'Base de datos no configurada'});
+    const id=String(req.params.id||'');
+    if (!/^\d+$/.test(id)) return res.status(400).json({error:'Identificador de pedido no válido'});
+    const r=await pool.query('DELETE FROM orders WHERE id=$1 RETURNING id,reference',[id]);
+    if (!r.rowCount) return res.status(404).json({error:'No se encontró el pedido'});
+    res.json({ok:true,deleted:r.rows[0]});
+  } catch(e) {
+    console.error('delete order error:',e.message);
+    res.status(500).json({error:'No se pudo eliminar el pedido'});
+  }
+});
 app.get('/api/admin/coupons', async (_req,res)=>{try{const r=await pool.query('SELECT * FROM coupons ORDER BY created_at DESC');res.json(r.rows)}catch(e){res.status(500).json({error:'No se pudieron cargar promociones'})}});
 app.post('/api/admin/coupons', async (req,res)=>{try{const b=req.body||{},code=String(b.code||'').trim().toUpperCase(),type=String(b.discount_type||'PERCENT'),value=Number(b.discount_value),min=Number(b.min_amount||0),max=b.max_uses===''||b.max_uses==null?null:Number(b.max_uses);if(!/^[A-Z0-9_-]{3,32}$/.test(code)||!['PERCENT','FIXED'].includes(type)||!Number.isSafeInteger(value)||value<=0||(type==='PERCENT'&&value>100)||!Number.isSafeInteger(min)||min<0||(max!==null&&(!Number.isInteger(max)||max<1)))return res.status(400).json({error:'Revisa código, tipo de descuento, valor y límites.'});const r=await pool.query('INSERT INTO coupons(code,discount_type,discount_value,min_amount,max_uses,active,starts_at,ends_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',[code,type,value,min,max,b.active!==false,b.starts_at||null,b.ends_at||null]);res.status(201).json(r.rows[0])}catch(e){res.status(e.code==='23505'?409:500).json({error:e.code==='23505'?'Ese código ya existe.':'No se pudo crear el cupón.'})}});
 app.put('/api/admin/coupons/:id', async (req,res)=>{try{const b=req.body||{},code=String(b.code||'').trim().toUpperCase(),type=String(b.discount_type||'PERCENT'),value=Number(b.discount_value),min=Number(b.min_amount||0),max=b.max_uses===''||b.max_uses==null?null:Number(b.max_uses);if(!/^[A-Z0-9_-]{3,32}$/.test(code)||!['PERCENT','FIXED'].includes(type)||!Number.isSafeInteger(value)||value<=0||(type==='PERCENT'&&value>100)||!Number.isSafeInteger(min)||min<0||(max!==null&&(!Number.isInteger(max)||max<1)))return res.status(400).json({error:'Revisa los datos del cupón.'});const r=await pool.query('UPDATE coupons SET code=$1,discount_type=$2,discount_value=$3,min_amount=$4,max_uses=$5,active=$6,starts_at=$7,ends_at=$8 WHERE id=$9 RETURNING *',[code,type,value,min,max,b.active!==false,b.starts_at||null,b.ends_at||null,req.params.id]);if(!r.rowCount)return res.status(404).json({error:'Cupón no encontrado'});res.json(r.rows[0])}catch(e){res.status(e.code==='23505'?409:500).json({error:e.code==='23505'?'Ese código ya existe.':'No se pudo actualizar el cupón.'})}});
