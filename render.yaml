@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: zenity-store
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zenity-db
+          property: connectionString
+      - key: PGSSL
+        value: "true"
+      - key: WOMPI_ENV
+        value: sandbox
+      - key: WOMPI_PUBLIC_KEY
+        sync: false
+      - key: WOMPI_PRIVATE_KEY
+        sync: false
+      - key: WOMPI_INTEGRITY_SECRET
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+databases:
+  - name: zenity-db
+    plan: free
+    databaseName: zenity
+    user: zenity_user
