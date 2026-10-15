@@ -7,7 +7,7 @@ El frontend conserva el HTML original y sus diseños. Se añade un backend Expre
 - El catálogo y los precios se validan en el servidor (no se confía en precios enviados por el navegador).
 - Los pedidos quedan `PENDING` hasta que el backend consulte a Wompi. El webhook debe configurarse en el panel de Wompi como `https://TU-DOMINIO.onrender.com/api/wompi/webhook`, evento `transaction.updated`.
 - El backend verifica el transaction ID con la API privada de Wompi antes de actualizar estado. Nunca pongas la llave privada ni el secreto de integridad en el HTML.
-- El panel inicial autenticado está disponible en `/admin`. Configura `ADMIN_USER` y `ADMIN_PASSWORD` en Render; usa una contraseña larga y única. El panel permite consultar pedidos y ver el catálogo, pero todavía no editar productos ni controlar inventario. Tampoco incluye envío/costos de envío ni correo de confirmación. Completar los datos legales de la marca y revisar políticas antes de vender en producción.
+- El panel autenticado está disponible en `/admin`. Configura `ADMIN_USER` y `ADMIN_PASSWORD` en Render; usa una contraseña larga y única. Desde el panel se gestionan productos, precios, existencias, imágenes por URL, pedidos, despachos, clientes, cupones y algunos ajustes de tienda. No incluye carga directa de archivos de imagen, integración automática con transportadoras ni reembolsos de Wompi.
 
 ## Ejecutar localmente
 1. Instala Node.js 20 o superior y PostgreSQL.
@@ -29,7 +29,10 @@ El frontend conserva el HTML original y sus diseños. Se añade un backend Expre
 - `GET /api/products` catálogo de precios del backend.
 - `GET /admin` panel privado con autenticación HTTP Basic.
 - `GET /api/admin/orders` pedidos (requiere autenticación).
-- `GET /api/admin/products` catálogo para el panel (requiere autenticación).
+- `GET/POST/PUT/DELETE /api/admin/products` catálogo e inventario (requiere autenticación; el borrado es desactivación).
+- `GET/POST/PUT/DELETE /api/admin/coupons` gestión de promociones (requiere autenticación).
+- `GET/PUT /api/admin/settings` ajustes de tienda (requiere autenticación).
+- `POST /api/coupons/validate` valida un cupón antes del pago.
 - `POST /api/orders` valida datos/productos, guarda pedido y devuelve URL de checkout.
 - `GET /api/orders/:reference/status?tx=...` consulta estado de pedido; si hay ID de transacción intenta verificarlo con Wompi desde el servidor.
 - `POST /api/wompi/webhook` recibe eventos y consulta la transacción en Wompi antes de actualizar el pedido.
@@ -42,6 +45,6 @@ Usa exclusivamente las llaves sandbox y los medios/credenciales de prueba indica
 
 Entra a `/admin` con `ADMIN_USER` y `ADMIN_PASSWORD` configurados en Render. El panel incluye resumen de ventas/pedidos, gestión de catálogo (crear, editar, ocultar/activar), precios, categoría, etiqueta y existencias; alertas de stock bajo; filtros de pedidos por pago y despacho; actualización de estado logístico y guía; vista de clientes calculada desde los pedidos; y exportación CSV de pedidos.
 
-La tabla `products` se crea automáticamente y se inicializa con los productos del catálogo que aún no existan, con 20 unidades iniciales por producto. **Antes de operar la tienda, revisa y corrige esas existencias para que coincidan con tu inventario real.** Los productos nuevos o cambios de precio/stock hechos en el panel se reflejan en el catálogo público y el servidor usa el precio guardado en la base de datos al crear el pedido. El stock se descuenta cuando Wompi confirma por primera vez el pago aprobado.
+Las tablas `products`, `coupons` y `store_settings` se crean automáticamente y se inicializan con los productos del catálogo que aún no existan, con 20 unidades iniciales por producto. **Antes de operar la tienda, revisa y corrige esas existencias para que coincidan con tu inventario real.** Los productos nuevos o cambios de precio/stock hechos en el panel se reflejan en el catálogo público y el servidor usa el precio guardado en la base de datos al crear el pedido. El stock se descuenta cuando Wompi confirma por primera vez el pago aprobado.
 
-El panel todavía no incluye carga de fotografías desde el administrador, códigos de descuento, gestión automática de transportadoras ni devolución/reembolso por Wompi.
+Las imágenes de producto se agregan mediante URL HTTPS (no mediante carga de archivos). Los códigos promocionales pueden ser porcentuales o de valor fijo, con mínimo de compra, fechas y límite de usos. La configuración de tienda se guarda en PostgreSQL; los campos de contacto son datos de configuración y deben verificarse en el diseño público antes de anunciarse. No hay integración automática con transportadoras ni devoluciones/reembolsos de Wompi.

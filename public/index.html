@@ -187,7 +187,7 @@ footer.ft{display:block;padding:0;background:#050505;border-top:0;color:#f4f4f2}
 <label>DIRECCIÓN DE ENTREGA</label><input name="direccion" required>
 <label>NOTAS (opcional)</label><textarea name="notas" rows="2"></textarea>
 <div class="ck"><input type="checkbox" name="acepto" required><span>Acepto los <a href="#terminos">términos</a>, la <a href="#privacidad">política de privacidad</a> y el <a href="#datos">tratamiento de datos personales</a>.</span></div>
-<div class="total"><span>TOTAL</span><span id="tt2">$0</span></div>
+<label>CÓDIGO PROMOCIONAL (opcional)</label><div style="display:flex;gap:8px"><input id="couponCode" autocomplete="off" placeholder="Ej. ZENITY10"><button type="button" id="applyCoupon" class="ghost">APLICAR</button></div><p id="couponMsg" style="font:12px Arial;opacity:.8"></p><div class="total"><span>TOTAL</span><span id="tt2">$0</span></div>
 <p style="font:12px/1.5 Arial;opacity:.75;margin-bottom:10px">Al confirmar te llevamos a <b>Wompi</b> para pagar con tarjeta, PSE, Nequi, Bancolombia u otros medios.</p><button class="btn" id="payb" style="width:100%">CONFIRMAR Y PAGAR</button><button type="button" class="ghost" id="bk">← VOLVER A LA BAG</button></form>
 <div id="v3" style="display:none"><h3 class="H">LISTO <button id="x3">✕</button></h3><div id="conf"></div></div>
 </aside>
@@ -217,6 +217,7 @@ const shirt=(p,back)=>{
  return `<svg viewBox="0 0 300 320"><path d="${body}" fill="${p.c}" stroke="#8886" stroke-width="2"/>${x}${art}</svg>`;
 };
 const money=n=>'$'+n.toLocaleString('es-CO');
+let appliedCoupon='',couponDiscount=0;
 const fmt=(p,s)=>p[s]?`<img class="${s[0]}" src="${p[s]}" alt="${p.n}">`:`<div class="${s[0]}">${shirt(p,s==='back')}</div>`;
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.1});
 let cart=[],filter='todo';
@@ -228,12 +229,12 @@ function card(p,look,i){
 }
 function fill(id,list,look){const g=document.getElementById(id);g.innerHTML='';list.forEach((p,i)=>g.appendChild(card(p,look,i)))}
 const shop=()=>fill('g-shop',P.filter(p=>filter==='todo'||p.t===filter));
-async function syncCatalog(){try{const r=await fetch('/api/products');if(!r.ok)return;const data=await r.json();if(!Array.isArray(data)||!data.length)return;const defaults=new Map(P.map(p=>[p.n,p]));P=data.map(x=>{const old=defaults.get(x.name)||{};return {...old,n:x.name,t:x.category,pr:Number(x.price),tag:x.tag||old.tag||'',stock:Number(x.stock??20),active:x.active!==false,c:old.c||'#171717',ink:old.ink||'#e10600',d:old.d||x.name.split(' ')[0],front:old.front||'',back:old.back||''}})}catch(e){}}
+async function syncCatalog(){try{const r=await fetch('/api/products');if(!r.ok)return;const data=await r.json();if(!Array.isArray(data))return;const defaults=new Map(P.map(p=>[p.n,p]));P=data.map(x=>{const old=defaults.get(x.name)||{};return {...old,n:x.name,t:x.category,pr:Number(x.price),tag:x.tag||old.tag||'',stock:Number(x.stock??20),active:x.active!==false,c:old.c||'#171717',ink:old.ink||'#e10600',d:old.d||x.name.split(' ')[0],front:x.front_image||old.front||'',back:x.back_image||old.back||'',description:x.description||''}})}catch(e){}}
 async function initCatalog(){await syncCatalog();Object.keys(CAT).forEach(t=>{const b=document.createElement('button');b.className='cat H'+(t==='todo'?' on':'');const n=t==='todo'?P.length:P.filter(p=>p.t===t).length;b.innerHTML=(t==='todo'?'<svg viewBox="0 0 300 320"><path d="'+CROSS+'" transform="translate(150,160) scale(2.2)" fill="currentColor"/></svg>':'<svg viewBox="0 0 300 320"><path d="'+(CAT[t]||CAT.camisetas)+'" fill="none" stroke="currentColor" stroke-width="14"/></svg>')+t+'<small>'+n+' PRODUCTOS</small>';b.onclick=()=>{filter=t;document.querySelectorAll('.cat').forEach(x=>x.classList.remove('on'));b.classList.add('on');shop()};cats.appendChild(b)});fill('g-home',P.slice(0,3));shop();}
 initCatalog();
 /* modelos (reemplaza por <img>) */
-const mp=[P[4],P[2],P[0]];
-document.querySelectorAll('.model').forEach((m,i)=>{const p=mp[i];m.insertAdjacentHTML('afterbegin',`<svg class="m" viewBox="0 0 300 420"><circle cx="150" cy="70" r="40" fill="#8886"/><g transform="translate(0,95)">${shirt(p,false).replace(/<svg[^>]*>|<\/svg>/g,'')}</g></svg>`)});
+const mp=[P[4],P[2],P[0]].filter(Boolean);
+document.querySelectorAll('.model').forEach((m,i)=>{const p=mp[i]||mp[0];if(!p)return;m.insertAdjacentHTML('afterbegin',`<svg class="m" viewBox="0 0 300 420"><circle cx="150" cy="70" r="40" fill="#8886"/><g transform="translate(0,95)">${shirt(p,false).replace(/<svg[^>]*>|<\/svg>/g,'')}</g></svg>`)});
 /* skyline urbano */
 function sky(id,seed){let s='<rect width="1200" height="220" fill="#0a0a0a"/><circle cx="900" cy="70" r="40" fill="#e10600"/>',x=0,r=seed;const rnd=()=>(r=(r*9301+49297)%233280)/233280;
  while(x<1200){const w=40+rnd()*70,h=60+rnd()*120;s+=`<rect x="${x}" y="${220-h}" width="${w}" height="${h}" fill="${rnd()>.8?'#e10600':'#1d1d1d'}" stroke="#333"/>`;
@@ -250,14 +251,15 @@ const WA='573000000000',esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>'&#'+c
 const setV=n=>{[v1,v2,v3].forEach((e,i)=>e.style.display=i+1===n?'block':'none')};
 function upd(){cn.textContent=cart.length;
  items.innerHTML=cart.length?cart.map((c,i)=>`<div class="li"><span>${c.p.n}<br><select data-i="${i}">${sizes(c.p).map(z=>`<option${z===c.s?' selected':''}>${z}</option>`).join('')}</select></span><span>${money(c.p.pr)} <a href="#" data-i="${i}" style="color:#e10600;text-decoration:none">✕</a></span></div>`).join(''):'<p style="opacity:.6">Tu bag está vacía.</p>';
- tt.textContent=tt2.textContent=money(tot())}
+ tt.textContent=money(tot());tt2.textContent=money(Math.max(0,tot()-couponDiscount))}
 items.onchange=e=>{if(e.target.tagName==='SELECT')cart[e.target.dataset.i].s=e.target.value};
 items.onclick=e=>{const a=e.target.closest('a');if(a){e.preventDefault();cart.splice(a.dataset.i,1);upd()}};
 const openD=()=>{setV(1);dr.classList.add('open')},closeD=()=>dr.classList.remove('open');
 cb.onclick=openD;x.onclick=x2.onclick=x3.onclick=closeD;bk.onclick=()=>setV(1);
 pay.onclick=()=>cart.length?setV(2):toast('Agrega una prenda primero');
+document.getElementById('applyCoupon').onclick=async()=>{const code=document.getElementById('couponCode').value.trim();if(!code){appliedCoupon='';couponDiscount=0;document.getElementById('couponMsg').textContent='Código eliminado.';upd();return}try{const r=await fetch('/api/coupons/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,items:cart.map(c=>({name:c.p.n,size:c.s,quantity:1}))})});const d=await r.json();if(!r.ok)throw Error(d.error||'Cupón no válido');appliedCoupon=d.code;couponDiscount=Number(d.discount_cop)||0;document.getElementById('couponMsg').textContent='Cupón aplicado. Descuento: '+money(couponDiscount);upd()}catch(e){appliedCoupon='';couponDiscount=0;document.getElementById('couponMsg').textContent=e.message;upd()}};
 v2.onsubmit=async e=>{e.preventDefault();payb.disabled=true;payb.textContent='CONECTANDO CON WOMPI…';
- try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:Object.fromEntries(new FormData(v2)),items:cart.map(c=>({name:c.p.n,size:c.s,quantity:1}))})});
+ try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:Object.fromEntries(new FormData(v2)),items:cart.map(c=>({name:c.p.n,size:c.s,quantity:1})),couponCode:appliedCoupon})});
   const d=await r.json();if(!r.ok||!d.checkoutUrl)throw new Error(d.error||'No se pudo iniciar el pago');location.href=d.checkoutUrl}
  catch(err){toast(err.message||'No se pudo iniciar el pago. Intenta de nuevo.');payb.disabled=false;payb.textContent='CONFIRMAR Y PAGAR'}};
 /* regreso desde Wompi */
@@ -265,8 +267,9 @@ v2.onsubmit=async e=>{e.preventDefault();payb.disabled=true;payb.textContent='CO
  try{const r=await fetch('/api/orders/'+encodeURIComponent(o)+'/status'+(tx?'?tx='+encodeURIComponent(tx):''));const d=await r.json(),st=d.payment_status;
   const T={APPROVED:['¡Pago aprobado!','Recibimos tu pago. Te contactaremos para coordinar el envío.'],PENDING:['Pago en proceso','Tu pago aún se está validando. Cuando se confirme, procesaremos tu pedido.']}[st]||['Pago no completado','No se pudo completar el pago. Puedes intentarlo de nuevo desde la tienda.'];
   conf.innerHTML=`<p style="font:700 15px/1.6 Arial;margin-bottom:12px"><span style="color:#e10600">${T[0]}</span><br>Pedido ${esc(o)}</p><p style="font:13px/1.6 Arial;opacity:.8">${T[1]}</p>`;
-  if(st==='APPROVED'){cart=[];upd()}setV(3);dr.classList.add('open');history.replaceState(null,'','/#inicio')}catch(e){}})();
+  if(st==='APPROVED'){cart=[];appliedCoupon='';couponDiscount=0;upd()}setV(3);dr.classList.add('open');history.replaceState(null,'','/#inicio')}catch(e){}})();
 function toast(m){ts.textContent=m;ts.classList.add('s');setTimeout(()=>ts.classList.remove('s'),2200)}
+fetch('/api/storefront/settings').then(r=>r.ok?r.json():{}).then(s=>{if(s.store_name)document.title=String(s.store_name)+' | Urban Wear';if(s.contact_email){document.querySelectorAll('a[href^="mailto:contacto@zenity.co"]').forEach(a=>a.href='mailto:'+String(s.contact_email).replace(/[\r\n]/g,''));}if(s.instagram){document.querySelectorAll('a[href="https://instagram.com"]').forEach(a=>a.href=String(s.instagram));}}).catch(()=>{});
 f.onsubmit=e=>{e.preventDefault();toast('Mensaje enviado');f.reset()};
 mn.onclick=()=>ln.classList.toggle('open');
 mq.innerHTML='ZENITY ✦ STREETWEAR ✦ NEW DROP ✦ EDICIÓN LIMITADA ✦ '.repeat(14);
