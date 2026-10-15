@@ -21,8 +21,8 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:90;opa
 .emb{position:absolute;z-index:4;pointer-events:none}
 .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0;border:2px solid var(--fg);margin:20px 0}
 .cat{background:none;border:0;border-right:2px solid var(--fg);color:inherit;padding:14px 8px 10px;cursor:pointer;font-size:20px;text-align:center;transition:.3s}
-.cat:last-child{border-right:0}.cat svg{width:56px;height:56px;display:block;margin:0 auto 4px;transition:transform .4s}
-.cat:hover svg{transform:translateY(-6px) scale(1.1)}.cat.on,.cat:hover{background:var(--red);color:#fff}.cat small{display:block;font:700 10px Arial;letter-spacing:.15em;opacity:.7}
+.cat:last-child{border-right:0}.cat svg,.cat img{width:56px;height:56px;display:block;margin:0 auto 4px;object-fit:contain;transition:transform .4s}.cat img{filter:none}
+.cat:hover svg,.cat:hover img{transform:translateY(-6px) scale(1.1)}.cat.on,.cat:hover{background:var(--red);color:#fff}.cat small{display:block;font:700 10px Arial;letter-spacing:.15em;opacity:.7}
 .tape{background:var(--red);color:#fff;overflow:hidden;white-space:nowrap;padding:9px 0;font:700 12px Arial;letter-spacing:.25em}
 .tape div{display:inline-block;animation:mq 25s linear infinite}
 @keyframes mq{to{transform:translateX(-50%)}}
@@ -230,7 +230,9 @@ function card(p,look,i){
 function fill(id,list,look){const g=document.getElementById(id);g.innerHTML='';list.forEach((p,i)=>g.appendChild(card(p,look,i)))}
 const shop=()=>fill('g-shop',P.filter(p=>filter==='todo'||p.t===filter));
 async function syncCatalog(){try{const r=await fetch('/api/products');if(!r.ok)return;const data=await r.json();if(!Array.isArray(data))return;const defaults=new Map(P.map(p=>[p.n,p]));P=data.map(x=>{const old=defaults.get(x.name)||{};return {...old,n:x.name,t:x.category,pr:Number(x.price),tag:x.tag||old.tag||'',stock:Number(x.stock??20),active:x.active!==false,c:old.c||'#171717',ink:old.ink||'#e10600',d:old.d||x.name.split(' ')[0],front:x.front_image||old.front||'',back:x.back_image||old.back||'',description:x.description||''}})}catch(e){}}
-async function initCatalog(){await syncCatalog();Object.keys(CAT).forEach(t=>{const b=document.createElement('button');b.className='cat H'+(t==='todo'?' on':'');const n=t==='todo'?P.length:P.filter(p=>p.t===t).length;b.innerHTML=(t==='todo'?'<svg viewBox="0 0 300 320"><path d="'+CROSS+'" transform="translate(150,160) scale(2.2)" fill="currentColor"/></svg>':'<svg viewBox="0 0 300 320"><path d="'+(CAT[t]||CAT.camisetas)+'" fill="none" stroke="currentColor" stroke-width="14"/></svg>')+t+'<small>'+n+' PRODUCTOS</small>';b.onclick=()=>{filter=t;document.querySelectorAll('.cat').forEach(x=>x.classList.remove('on'));b.classList.add('on');shop()};cats.appendChild(b)});fill('g-home',P.slice(0,3));shop();}
+const CAT_ICONS={camisetas:'/assets/icons/camisa.svg',sudaderas:'/assets/icons/hoddies.svg',pantalones:'/assets/icons/pantalon.svg',gorras:'/assets/icons/gorros.svg'};
+const CAT_LABELS={todo:'TODOS',chaquetas:'CHAQUETAS',sudaderas:'SUDADERAS',camisetas:'CAMISETAS',pantalones:'PANTALONES',gorras:'GORRAS'};
+async function initCatalog(){await syncCatalog();Object.keys(CAT).forEach(t=>{const b=document.createElement('button');b.type='button';b.className='cat H'+(t==='todo'?' on':'');b.setAttribute('aria-label','Filtrar por '+(CAT_LABELS[t]||t));const n=t==='todo'?P.length:P.filter(p=>p.t===t).length;const icon=CAT_ICONS[t];const graphic=icon?'<img src="'+icon+'" alt="" loading="lazy">':(t==='todo'?'<svg viewBox="0 0 300 320" aria-hidden="true"><path d="'+CROSS+'" transform="translate(150,160) scale(2.2)" fill="currentColor"/></svg>':'<svg viewBox="0 0 300 320" aria-hidden="true"><path d="'+(CAT[t]||CAT.camisetas)+'" fill="none" stroke="currentColor" stroke-width="14"/></svg>');b.innerHTML=graphic+(CAT_LABELS[t]||t.toUpperCase())+'<small>'+n+' PRODUCTOS</small>';b.onclick=()=>{filter=t;document.querySelectorAll('.cat').forEach(x=>x.classList.remove('on'));b.classList.add('on');shop()};cats.appendChild(b)});fill('g-home',P.slice(0,3));shop();}
 initCatalog();
 /* modelos (reemplaza por <img>) */
 const mp=[P[4],P[2],P[0]].filter(Boolean);
