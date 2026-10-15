@@ -14,7 +14,7 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{background:var(--bg);color:var(--fg);font-family:'Helvetica Neue',Arial,sans-serif;overflow-x:hidden}
 body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:90;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
 .H{font-family:'Pirata One',Impact,'Arial Black',sans-serif;text-transform:uppercase;letter-spacing:.03em}
-.fl{animation:flo 5s ease-in-out infinite;will-change:transform}
+.fl{display:block;max-width:100%;height:auto;object-fit:contain;animation:flo 5s ease-in-out infinite;will-change:transform;overflow:visible}
 @keyframes flo{0%,100%{transform:translateY(0) rotate(-1.2deg)}50%{transform:translateY(-18px) rotate(1.2deg)}}
 .glow{filter:drop-shadow(0 14px 22px #e1060055)}
 .spk{height:22px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='22'%3E%3Cpath d='M0 22L18 0L36 22Z' fill='%23e10600'/%3E%3C/svg%3E") repeat-x bottom}
@@ -106,7 +106,7 @@ footer a{color:inherit;cursor:pointer}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:760px){.hh{grid-template-columns:1fr}.hr{max-width:320px;margin:0 auto}}
 #ld{position:fixed;inset:0;background:#0a0a0a;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;transition:opacity .6s,visibility .6s}
-#ld.off{opacity:0;visibility:hidden}#ld img{width:min(72vw,480px);filter:drop-shadow(0 10px 30px #e1060066)}
+#ld.off{opacity:0;visibility:hidden}#ld img{display:block;width:min(82vw,560px);height:auto;max-height:38vh;object-fit:contain;object-position:center;flex:0 1 auto;filter:drop-shadow(0 10px 30px #e1060066);transform:none!important;animation:none!important;overflow:visible}#ld{padding:24px;box-sizing:border-box;overflow:visible}#ld .bar2{flex:0 0 auto}
 .bar2{width:min(60vw,320px);height:3px;background:#ffffff22}.bar2 i{display:block;height:100%;background:#e10600;width:0;animation:ldb 1.6s ease forwards}@keyframes ldb{to{width:100%}}
 .drawer{width:min(440px,100%)}
 .drawer select,.co input,.co select,.co textarea{background:#0a0a0a;color:#f4f4f2;border:2px solid var(--fg);padding:10px;font:14px Arial;width:100%;margin-bottom:8px}

@@ -170,7 +170,7 @@ app.patch('/api/admin/orders/:id/fulfillment', async (req,res) => {
     res.json({ok:true,...r.rows[0]});
   } catch(e) {
     console.error('save fulfillment error:', e.message);
-    res.status(500).json({error:'No se pudo guardar el despacho en la base de datos'});
+    res.status(500).json({error:e.code==='42703'?'La base de datos no tiene las columnas de despacho. Reinicia el servicio para ejecutar las migraciones.':e.code==='22P02'?'El identificador del pedido no es válido.':'Error de base de datos al guardar el despacho: '+String(e.message||'error').slice(0,180)});
   }
 });
 app.delete('/api/admin/orders/:id', async (req,res) => {
@@ -183,7 +183,7 @@ app.delete('/api/admin/orders/:id', async (req,res) => {
     res.json({ok:true,deleted:r.rows[0]});
   } catch(e) {
     console.error('delete order error:',e.message);
-    res.status(500).json({error:'No se pudo eliminar el pedido'});
+    res.status(500).json({error:e.code==='23503'?'No se puede eliminar porque otro registro depende de este pedido.': 'Error de base de datos al eliminar el pedido: '+String(e.message||'error').slice(0,180)});
   }
 });
 app.get('/api/admin/coupons', async (_req,res)=>{try{const r=await pool.query('SELECT * FROM coupons ORDER BY created_at DESC');res.json(r.rows)}catch(e){res.status(500).json({error:'No se pudieron cargar promociones'})}});
